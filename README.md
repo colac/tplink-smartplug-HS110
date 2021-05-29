@@ -1,3 +1,5 @@
+#Original project from https://github.com/softScheck/tplink-smartplug, I have only changed a tiny bit of the python script to fit my needs :)
+
 # TP-Link WiFi SmartPlug Client and Wireshark Dissector
 
 For the full story, see [Reverse Engineering the TP-Link HS110](https://www.softscheck.com/en/reverse-engineering-tp-link-hs110/)
