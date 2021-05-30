@@ -49,6 +49,7 @@ def validPort(port):
 
     return port
 
+
 # Predefined Smart Plug Commands
 # For a full list of commands, consult tplink_commands.txt
 commands = {'info'     : '{"system":{"get_sysinfo":{}}}',
@@ -88,6 +89,7 @@ def decrypt(string):
         result += chr(a)
     return result
 
+
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description=f"TP-Link Wi-Fi Smart Plug Client v{version}")
 parser.add_argument("-t", "--target", metavar="<hostname>", required=True,
@@ -105,69 +107,62 @@ group.add_argument("-j", "--json", metavar="<JSON string>",
                    help="Full JSON string of command to send")
 args = parser.parse_args()
 
+
 # Set target IP, port and command to send
 ip = args.target
 port = args.port
+if args.command is None:
+    cmd = args.json
+else:
+    cmd = commands[args.command]
 
-i = 1
-while i < 10:
-    i += 1
-    if args.command is None:
-        cmd = args.json
+
+# Send command and receive reply
+try:
+    sock_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock_tcp.settimeout(int(args.timeout))
+    sock_tcp.connect((ip, port))
+    sock_tcp.settimeout(None)
+    sock_tcp.send(encrypt(cmd))
+    data = sock_tcp.recv(2048)
+    sock_tcp.close()
+
+    decrypted = decrypt(data[4:])
+    decrypted = json.loads(decrypted)
+    voltage = decrypted["emeter"]["get_realtime"]["voltage_mv"]
+    current = decrypted["emeter"]["get_realtime"]["current_ma"]
+    power = decrypted["emeter"]["get_realtime"]["power_mw"]
+    if args.quiet:
+        print(decrypted)
     else:
-        cmd = commands[args.command]
+        #print("Sent:     ", cmd)
+        #print("Received: ", decrypted)
+        #print(decrypted)
+        timestamp = datetime.datetime.now()
 
+        #print(timestamp)
+        #print(voltage)
+        #print(current)
+        #print(power)
 
-    # Send command and receive reply
-    try:
-        sock_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock_tcp.settimeout(int(args.timeout))
-        sock_tcp.connect((ip, port))
-        sock_tcp.settimeout(None)
-        sock_tcp.send(encrypt(cmd))
-        data = sock_tcp.recv(2048)
-        sock_tcp.close()
+        stringVoltage="[%s] - %s [mv]\n"% (timestamp,voltage)
+	stringCurrent="[%s] - %s [ma]\n"% (timestamp,current)
+	stringPower="[%s] - %s [mw]\n"% (timestamp,power)
 
-        decrypted = decrypt(data[4:])
-        decrypted = json.loads(decrypted)
-        voltage = decrypted["emeter"]["get_realtime"]["voltage_mv"]
-        current = decrypted["emeter"]["get_realtime"]["current_ma"]
-        power = decrypted["emeter"]["get_realtime"]["power_mw"]
-        if args.quiet:
-            print(decrypted)
-        else:
-            #print("Sent:     ", cmd)
-            #print("Received: ", decrypted)
-            #print(decrypted)
-            timestamp = datetime.datetime.now()
+        f=open("logVoltage.txt", "a+")
+        #f.write("[%s] - %s [mv]\n"% (timestamp,voltage))
+	f.write(stringVoltage)
+	producer.send('energy-consumption', key=b'mv', value=b'stringVoltage')        
+	
+	f=open("logCurrent.txt", "a+")
+        #f.write("[%s] - %s [ma]\n"% (timestamp,current))    
+        f.write(stringCurrent)
+	producer.send('energy-consumption', key=b'ma', value=b'stringCurrent')
+	
+	f=open("logPower.txt", "a+")
+        #f.write("[%s] - %s [mw]\n"% (timestamp,power))
+	f.write(stringPower)
+	producer.send('energy-consumption', key=b'mw', value=b'stringPower')
 
-            print(timestamp)
-            print(voltage)
-            print(current)
-            print(power)
-
-            stringVoltage="[%s] - %s [mv]\n"% (timestamp,voltage)
-            stringCurrent="[%s] - %s [ma]\n"% (timestamp,current)
-            stringPower="[%s] - %s [mw]\n"% (timestamp,power)
-
-            arrayVoltage = bytearray(stringVoltage, "utf8")
-            arrayCurrent = bytearray(stringCurrent, "utf8")
-            arrayPower = bytearray(stringPower, "utf8")
-
-            f=open("logPower.txt", "a+")
-            #f.write("[%s] - %s [mW]\n"% (timestamp,power))
-            f.write(stringPower)
-            producer.send('energy-consumption-data-tests-a', key=b'mW', value=arrayPower)
-
-            f=open("logVoltage.txt", "a+")
-            #f.write("[%s] - %s [mV]\n"% (timestamp,voltage))
-            f.write(stringVoltage)
-            producer.send('energy-consumption-data-tests-a', key=b'mV', value=arrayVoltage)
-
-            f=open("logCurrent.txt", "a+")
-            #f.write("[%s] - %s [mA]\n"% (timestamp,current))
-            f.write(stringCurrent)
-            producer.send('energy-consumption-data-tests-a', key=b'mA', value=arrayCurrent)
-
-    except socket.error:
-        quit(f"Could not connect to host {ip}:{port}")
+except socket.error:
+    quit(f"Could not connect to host {ip}:{port}")
